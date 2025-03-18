@@ -52,19 +52,20 @@ async def stream_response(query: str):
             
             entity_extractor = EntityExtractorAgent()
             # In a real scenario, you would use the actual entity extraction
-            # entities = await entity_extractor.extract_entities(query)
+            entities = await entity_extractor.extract_entities(query)
 
 
-            movie=['The Dark Knight','Batman Begins']
+            # movie=['The Dark Knight','Batman Begins']
             # movie=['Looper','Interstellar']
-            genre=['sci-fi', 'adventure', 'action']
-            entities = MovieEntities(movie=movie)
+            # genre=['sci-fi', 'adventure', 'action']
+            # entities = MovieEntities(movie=movie)
 
             yield "data: Analyzing query for movie references and parameters...\n\n"
             await asyncio.sleep(0.01)
             
             # For demonstration, using hardcoded entities
-            yield f"data: Entity extraction complete. Found entities: {entities}\n\n"
+            yield f"data: Entity extraction complete. Found entities: \n\n"
+            yield f"data:xx--data--entities--{json.dumps(entities.model_dump())}\n\n"
             await asyncio.sleep(0.01)
 
             if entities.movie:
@@ -75,7 +76,7 @@ async def stream_response(query: str):
                 await asyncio.sleep(0.01)
 
                 similar_movies = await find_similar_by_plot(
-                    entities.movie,
+                    entities,
                     top_k=10
                 )
                 yield f"data:xx--data--similar_movies--{json.dumps(similar_movies)}\n\n"

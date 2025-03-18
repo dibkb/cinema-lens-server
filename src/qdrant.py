@@ -4,6 +4,7 @@ import os
 import asyncio
 from typing import List
 import numpy as np
+from .entity import MovieEntities
 @asynccontextmanager
 async def get_qdrant_client():
     qdrant_client = QdrantClient(
@@ -57,13 +58,13 @@ def average_vectors(vectors: List[np.ndarray]) -> np.ndarray:
 
 
 
-async def find_similar_by_plot(movie_titles: List[str], top_k: int = 10) -> List[dict]:
+async def find_similar_by_plot(entities: MovieEntities, top_k: int = 10) -> List[dict]:
     """
     Find similar movies by averaging plot embeddings of input titles
     Returns list of {title: str, similarity: float}
     """
     # Get reference movie vectors (already parallelized with the updated get_movie_vectors)
-    vectors = await get_movie_vectors(movie_titles)
+    vectors = await get_movie_vectors(entities.movie[0:min(len(entities.movie), 10)])
     if not vectors:
         return []
     # Create average vector
@@ -76,7 +77,7 @@ async def find_similar_by_plot(movie_titles: List[str], top_k: int = 10) -> List
                 key="title",
                 match=models.MatchText(text=title.lower())
             )
-            for title in movie_titles
+            for title in entities.movie
         ]
     )
 
