@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import asyncio
 from dotenv import load_dotenv
+from .letterboxd import Letterboxd
 from .extractor import MovieExtractor
 from .reddit import RedditPost, RedditResult
 from .serp import search_google
@@ -119,8 +120,35 @@ async def stream_response(query: str):
                 yield "data:Searching Letterboxd for movie recommendations...\n\n"
                 letterboxd_search_query = build_letterboxd_search_query(entities)
                 yield f"data:xx--data--letterboxd_search_query--{letterboxd_search_query}\n\n"
+                letterboxd_results = await asyncio.to_thread(search_google, letterboxd_search_query)
+
+                letterboxd_links = [x['link'] for x in letterboxd_results if str(x['link']).startswith('https://letterboxd.com')]
+
+                if len(letterboxd_links) == 0:
+                    yield "data: No Letterboxd links found in Google search results\n\n"
+                    yield ("result", None)
+                    return
                 
-                
+                links = letterboxd_links[0:min(len(letterboxd_links), 3)]
+
+                letterboxd_results:List[RedditResult] = []
+                letterboxd_tasks = []
+                for link in links:
+                    yield f"data:Searching in {link}...\n\n"
+                    async def process_single_letterboxd_link(link_url):
+                        letterboxd = Letterboxd(link_url)
+                        movies = letterboxd.get_movies()
+                        if (len(movies) > 0):
+                            return RedditResult(movies=movies[0:min(len(movies), 10)], site_url=link_url)
+
+                    letterboxd_tasks.append(process_single_letterboxd_link(link))
+
+                if letterboxd_tasks:
+                    for task in asyncio.as_completed(letterboxd_tasks):
+                        result_data = await task
+                        letterboxd_results.append(result_data)
+
+                yield f"data:xx--data--letterboxd_results--{json.dumps([x.model_dump() for x in letterboxd_results])}\n\n"
 
             
             async def process_reddit_search(entities):
@@ -236,12 +264,13 @@ async def stream_response(query: str):
             similarity_generator = process_movie_similarity(entities)
             reddit_generator = process_reddit_search(entities)
             cypher_generator = process_cypher_query(entities)
-            
+            letterboxd_generator = process_letterboxd_search(entities)
             # Run all generators concurrently
             tasks = [
                 asyncio.create_task(self_drain_generator(similarity_generator)),
                 asyncio.create_task(self_drain_generator(reddit_generator)),
-                asyncio.create_task(self_drain_generator(cypher_generator))
+                asyncio.create_task(self_drain_generator(cypher_generator)),
+                asyncio.create_task(self_drain_generator(letterboxd_generator))
             ]
             
             results = []
