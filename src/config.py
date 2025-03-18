@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str = os.getenv("NEO4J_PASSWORD")
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY")
     QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY")
-    SEP_API_KEY: str = os.getenv("SEP_API_KEY")
+    SERP_API_KEY: str = os.getenv("SERP_API_KEY")
 
 
     

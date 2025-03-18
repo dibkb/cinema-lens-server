@@ -31,58 +31,57 @@ class EntityExtractorAgent:
                 "system",
                 """### Entity Extraction Guidelines
 
-        **1. Genre Handling**
-        - MUST select genres exclusively from the provided list: {genres}
+        1. **Explicit Movie Title Priority**
+        - If the query explicitly mentions one or more movie titles, output only these titles.
+        - Do not infer or extract additional details (e.g., genres, actors, director, start/end year) when a movie is provided.
+        - Correct any spelling or formatting issues for explicit movie titles.
+
+        2. **Genre Handling (Only When No Explicit Movie Title is Provided, or No Director or Actor is Provided)**
+        - MUST select genres exclusively from the provided list: {genres}.
         - Map non-standard terms to their closest matches from the list:
-        - "Revenge action" → ["action", "thriller"]
-        - "Cyberpunk" → ["sci-fi", "action"]
-        - "Feel-good" → ["comedy", "romance"]
+            - "Revenge action" → ["action", "thriller"]
+            - "Cyberpunk" → ["sci-fi", "action"]
+            - "Feel-good" → ["comedy", "romance"]
         - For hybrid requests (e.g., "Action comedy"), combine genres: ["action", "comedy"]
 
-        **2. Entity Priority**
-        1. **Explicit Entities:** Prioritize in the order: director > actor > genre.
-        2. **Implied Genres:** Derive genres from themes or moods present in the query.
-        3. **Movie Extraction and Suggestions:**
-        - **Movie Extraction:** If movie titles are explicitly mentioned in the query, populate the "movie" field with those titles (after verifying spelling and correcting types as needed). Do not generate additional suggestions.
-        - **Movie Suggestions:** Only if no movie titles, director, or actor are mentioned should the system infer and suggest 1-3 movie titles based on the user's intent, theme match, critical acclaim, or cult classic status.
+        3. **Entity Priority (When No Explicit Movie Title is Provided)**
+        - Prioritize extraction in the order: director > actor > genre.
+        - Derive implied genres from themes or moods present in the query.
 
-        **3. Query Interpretation**
+        4. **Movie Extraction and Suggestions**
+        - **Movie Extraction:** If movie titles are explicitly mentioned, populate the "movie" field with those titles only.
+        - **Movie Suggestions:** If no explicit movie title, director, or actor is mentioned, then suggest 1-3 movie titles based on inferred user intent, theme match, critical acclaim, or cult classic status.
+
+        5. **Query Interpretation**
         - **Slang Handling:**
-        - "Porn" → interpret as "visually intense" (populate as a genre if applicable).
-        - "Mindf*ck" → map to ["thriller", "mystery"].
+            - "Porn" → interpret as "visually intense" (apply as a genre if applicable).
+            - "Mindf*ck" → map to ["thriller", "mystery"].
         - **Era Detection:**
-        - "80s vibe" → set year_start:1980, year_end:1989.
-        - "Modern classics" → set year_start:2010.
+            - "80s vibe" → set year_start:1980, year_end:1989.
+            - "Modern classics" → set year_start:2010.
 
-        **4. Validation Rules**
+        6. **Validation Rules**
         - Reject any genres not included in the provided {genres} list.
         - Correct typos/terms:
-        - "Spilberg" → "Steven Spielberg"
-        - "Di Caprio" → "Leonardo DiCaprio"
+            - "Spilberg" → "Steven Spielberg"
+            - "Di Caprio" → "Leonardo DiCaprio"
 
-        **5. Movie Handling Rules**
-        - **Explicit Movie Titles:** If movie titles are present in the query, use only these (after correcting any spelling or formatting issues).
-        - **Movie Suggestions:** If no explicit movie titles, and no director or actor is mentioned, then suggest 1-3 movie titles based on the inferred user intent.
-        - Do not combine explicit movie extraction with additional movie suggestions.
-
-        **6. Output Requirements**
+        7. **Output Requirements**
         - Include a `parsing_review` that explains:
-        - The rationale behind the selected genres from {genres}.
-        - The logic for handling movie titles—whether using the explicitly mentioned titles or generating suggestions.
-        - Any corrections made to spelling or terms.
+            - The rationale behind the selected genres from {genres} (if applicable).
+            - The logic for handling movie titles—whether using the explicitly mentioned titles or generating suggestions.
+            - Any corrections made to spelling or terms.
         - Format arrays consistently:
-        - Single entry: ["action"]
-        - Multiple entries: ["action", "comedy"]
-
-        {format_instructions}
+            - Single entry: ["action"]
+            - Multiple entries: ["action", "comedy"]
 
         **Genre List Reference**
-        {genres}"""
+        {genres}
+
+        {format_instructions}"""
             ),
             ("user", "{query}")
         ])
-
-
 
 
     async def extract_entities(self, query: str) -> MovieEntities:
