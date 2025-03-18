@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import asyncio
 from dotenv import load_dotenv
-from .qdrant import get_movie_by_title, get_movie_by_reference
+from .qdrant import find_similar_by_plot
 from .query import CypherQueryGenerator, MovieEntities
 from .entity import EntityExtractorAgent
 from .neo4j import process_result
@@ -53,9 +53,11 @@ async def stream_response(query: str):
             entity_extractor = EntityExtractorAgent()
             # In a real scenario, you would use the actual entity extraction
             # entities = await entity_extractor.extract_entities(query)
-            movie=['Back to the Future', 'Interstellar', 'The Terminator', 'Looper', '12 Monkeys']
+
+
+            movie=['The Dark Knight','Batman Begins']
+            # movie=['Looper','Interstellar']
             genre=['sci-fi', 'adventure', 'action']
-            
             entities = MovieEntities(movie=movie)
 
             yield "data: Analyzing query for movie references and parameters...\n\n"
@@ -71,35 +73,14 @@ async def stream_response(query: str):
                 
                 yield "data: Starting movie similarity search process...\n\n"
                 await asyncio.sleep(0.01)
-                
-                normalized_title = " ".join([x.capitalize() for x in entities.movie[0].strip().split(" ")])
-                
-                # Stream movie search process
-                yield f"data: Normalizing movie title to: {normalized_title}\n\n"
+
+                similar_movies = await find_similar_by_plot(
+                    entities.movie,
+                    top_k=10
+                )
+                yield f"data:xx--data--similar_movies--{json.dumps(similar_movies)}\n\n"
                 await asyncio.sleep(0.01)
-                
-                # Now using the async version of get_movie_by_title
-                reference_movie = await get_movie_by_title(normalized_title)
 
-
-                if len(reference_movie[0]) > 0:
-                    yield "data: Successfully found reference movie in database\n\n"
-                    await asyncio.sleep(0.01)
-                    
-                    yield "data: Initiating similarity search based on plot and features...\n\n"
-                    await asyncio.sleep(0.01)
-                    
-                    # Now using the async version of get_movie_by_reference
-                    similar_movies = await get_movie_by_reference(reference_movie[0])
-                    yield f"data: Similarity search complete. Found {len(similar_movies)} similar movies\n\n"
-                    await asyncio.sleep(0.01)
-
-                    yield f"data:xx--data--similar_movies--{json.dumps(similar_movies)}\n\n"
-                    
-                else:
-                    yield f"data: Warning: Could not find movie '{normalized_title}' in database\n\n"
-                    await asyncio.sleep(0.01)
-                    similar_movies = None
             else:
                 yield "data: No specific movie reference found in query\n\n"
                 await asyncio.sleep(0.01)

@@ -6,7 +6,7 @@ authors = [
     {name = "dibkb",email = "dibas9110@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.9,<4.0"
+requires-python = ">=3.10,<4.0"
 dependencies = [
     "fastapi>=0.109.2",
     "uvicorn>=0.27.1",
@@ -15,7 +15,8 @@ dependencies = [
     "langchain-openai>=0.0.7",
     "python-dotenv>=1.0.1",
     "qdrant-client (>=1.13.3,<2.0.0)",
-    "neo4j (>=5.28.1,<6.0.0)"
+    "neo4j (>=5.28.1,<6.0.0)",
+    "numpy (==2.1.0)"
 ]
 
 
