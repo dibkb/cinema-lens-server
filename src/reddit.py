@@ -5,9 +5,15 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import logging
+from pydantic import BaseModel, Field
+from typing import List
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+class RedditResult(BaseModel):
+    movies: List[str] = Field(description="List of movies from the site")
+    site_url: str = Field(description="URL of the site")
 
 class RedditPost:
     def __init__(self, url):

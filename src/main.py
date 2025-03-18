@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 import asyncio
 from dotenv import load_dotenv
 from .extractor import MovieExtractor
-from .reddit import RedditPost
+from .reddit import RedditPost, RedditResult
 from .serp import search_google
 from .search_query import build_reddit_search_query
 from .qdrant import find_similar_by_plot
@@ -129,21 +129,32 @@ async def stream_response(query: str):
                     yield ("result", None)
                     return
                 
-                yield f"data:xx--data--reddit_links--{reddit_links}\n\n"
-                
                 links = reddit_links[0:min(len(reddit_links), 3)]
+                reddit_results:List[RedditResult] = []
+                
+                # Create tasks for processing each Reddit link in parallel
+                reddit_tasks = []
                 for link in links:
                     yield f"data:Searching in {link}...\n\n"
-                    post = RedditPost(link)
-                    await asyncio.to_thread(post.initialize)
-                    movie_extractor = MovieExtractor()
-
-                    comments = post.get_comments()
-                    # Run movie extraction in a separate thread if it's CPU-intensive
-                    movies = await asyncio.to_thread(movie_extractor.extract_movies, comments)
+                    
+                    # Define as a regular async function, not an async generator
+                    async def process_single_reddit_link(link_url):
+                        post = RedditPost(link_url)
+                        await asyncio.to_thread(post.initialize)
+                        movie_extractor = MovieExtractor()
+                        comments = post.get_comments()
+                        movies = await asyncio.to_thread(movie_extractor.extract_movies, comments)
+                        return RedditResult(movies=movies.movies, site_url=link_url)
+                    
+                    reddit_tasks.append(process_single_reddit_link(link))
                 
-                    yield f"data:xx--data--reddit_results--{movies.movies}\n\n"
-                    yield ("result", movies)
+                # Process all Reddit links concurrently
+                if reddit_tasks:
+                    for task in asyncio.as_completed(reddit_tasks):
+                        result_data = await task
+                        reddit_results.append(result_data)
+                
+                yield f"data:xx--data--reddit_results--{json.dumps([x.model_dump() for x in reddit_results])}\n\n"
             
             async def process_cypher_query(entities):
                 yield "data: Starting Cypher query generation...\n\n"
@@ -202,27 +213,37 @@ async def stream_response(query: str):
                 
             entities = entities_result
             
+            # Helper function to drain a generator and capture its yield values
+            async def self_drain_generator(generator):
+                messages = []
+                result = None
+                async for message in generator:
+                    if isinstance(message, tuple) and message[0] == "result":
+                        result = message[1]
+                    else:
+                        messages.append(message)
+                return messages, result
+            
             # Create the generators but don't start them yet
-            generators = [
-                process_movie_similarity(entities),
-                process_reddit_search(entities),
-                process_cypher_query(entities)
+            similarity_generator = process_movie_similarity(entities)
+            reddit_generator = process_reddit_search(entities)
+            cypher_generator = process_cypher_query(entities)
+            
+            # Run all generators concurrently
+            tasks = [
+                asyncio.create_task(self_drain_generator(similarity_generator)),
+                asyncio.create_task(self_drain_generator(reddit_generator)),
+                asyncio.create_task(self_drain_generator(cypher_generator))
             ]
             
             results = []
-            for generator in generators:
-                try:
-                    process_result = None
-                    async for message in generator:
-                        if isinstance(message, tuple) and message[0] == "result":
-                            process_result = message[1]
-                        else:
-                            yield message
-                    
-                    if process_result is not None:
-                        results.append(process_result)
-                except Exception as e:
-                    yield f"data: Error in process: {str(e)}\n\n"
+            # Wait for all tasks to complete and yield their messages in the order they complete
+            for completed_task in asyncio.as_completed(tasks):
+                messages, result = await completed_task
+                for message in messages:
+                    yield message
+                if result is not None:
+                    results.append(result)
                 
         except Exception as e:
             yield f"data: Error occurred: {str(e)}\n\n"
