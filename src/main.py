@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from .extractor import MovieExtractor
 from .reddit import RedditPost, RedditResult
 from .serp import search_google
-from .search_query import build_reddit_search_query
+from .search_query import build_letterboxd_search_query, build_reddit_search_query
 from .qdrant import find_similar_by_plot
 from .query import CypherQueryGenerator, MovieEntities
 from .entity import EntityExtractorAgent
@@ -114,6 +114,14 @@ async def stream_response(query: str):
                     yield "data: No specific movie reference found in query\n\n"
                     yield "data: Proceeding with general search parameters...\n\n"
                     yield ("result", None)
+
+            async def process_letterboxd_search(entities):
+                yield "data:Searching Letterboxd for movie recommendations...\n\n"
+                letterboxd_search_query = build_letterboxd_search_query(entities)
+                yield f"data:xx--data--letterboxd_search_query--{letterboxd_search_query}\n\n"
+                
+                
+
             
             async def process_reddit_search(entities):
                 yield "data:Searching Reddit for movie recommendations...\n\n"
