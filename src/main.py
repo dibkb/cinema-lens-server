@@ -9,8 +9,9 @@ from .entity import EntityExtractorAgent
 from .neo4j import process_result
 from neo4j import AsyncGraphDatabase
 import os
+from typing import List
 load_dotenv()
-
+import json
 app = FastAPI(
     title="Cinema Lens API",
     description="API for Cinema Lens - A platform for cinema and photography enthusiasts",
@@ -23,7 +24,7 @@ neo4j = AsyncGraphDatabase.driver(os.getenv("NEO4J_URI"), auth=(os.getenv("NEO4J
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["http://localhost:5173"],  # In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,70 +42,111 @@ async def health():
 async def stream_response(query: str):
     async def event_generator():
         try:
+            # Add a small delay between events to ensure they're sent immediately
             # Stream entity extraction process
             yield "data: Starting entity extraction process...\n\n"
+            await asyncio.sleep(0.01)  # Small delay to ensure immediate sending
+            
             yield "data: Initializing entity extractor agent...\n\n"
+            await asyncio.sleep(0.01)
+            
             entity_extractor = EntityExtractorAgent()
+            # In a real scenario, you would use the actual entity extraction
             # entities = await entity_extractor.extract_entities(query)
+            movie=['Back to the Future', 'Interstellar', 'The Terminator', 'Looper', '12 Monkeys']
+            genre=['sci-fi', 'adventure', 'action']
+            
+            entities = MovieEntities(movie=movie)
+
             yield "data: Analyzing query for movie references and parameters...\n\n"
-            entities = MovieEntities(movie=["Law Abiding Citizen"],genres_union=False)
+            await asyncio.sleep(0.01)
+            
+            # For demonstration, using hardcoded entities
             yield f"data: Entity extraction complete. Found entities: {entities}\n\n"
+            await asyncio.sleep(0.01)
 
             if entities.movie:
                 yield "data: Movie reference detected in query...\n\n"
+                await asyncio.sleep(0.01)
+                
                 yield "data: Starting movie similarity search process...\n\n"
+                await asyncio.sleep(0.01)
+                
                 normalized_title = " ".join([x.capitalize() for x in entities.movie[0].strip().split(" ")])
                 
                 # Stream movie search process
                 yield f"data: Normalizing movie title to: {normalized_title}\n\n"
-                yield f"data: Searching database for movie: {normalized_title}\n\n"
-                reference_movie = get_movie_by_title(normalized_title)
+                await asyncio.sleep(0.01)
+                
+                # Now using the async version of get_movie_by_title
+                reference_movie = await get_movie_by_title(normalized_title)
 
-                if len(reference_movie) > 0:
+
+                if len(reference_movie[0]) > 0:
                     yield "data: Successfully found reference movie in database\n\n"
+                    await asyncio.sleep(0.01)
+                    
                     yield "data: Initiating similarity search based on plot and features...\n\n"
-                    similar_movies = get_movie_by_reference(reference_movie)
+                    await asyncio.sleep(0.01)
+                    
+                    # Now using the async version of get_movie_by_reference
+                    similar_movies = await get_movie_by_reference(reference_movie[0])
                     yield f"data: Similarity search complete. Found {len(similar_movies)} similar movies\n\n"
-                    yield "data: Processing similarity results...\n\n"
+                    await asyncio.sleep(0.01)
+
+                    yield f"data:xx--data--similar_movies--{json.dumps(similar_movies)}\n\n"
+                    
                 else:
                     yield f"data: Warning: Could not find movie '{normalized_title}' in database\n\n"
+                    await asyncio.sleep(0.01)
                     similar_movies = None
             else:
                 yield "data: No specific movie reference found in query\n\n"
+                await asyncio.sleep(0.01)
+                
                 yield "data: Proceeding with general search parameters...\n\n"
+                await asyncio.sleep(0.01)
+                
                 similar_movies = None
 
             # Stream Cypher query generation
             yield "data: Starting Cypher query generation...\n\n"
+            await asyncio.sleep(0.01)
+            
             yield "data: Initializing query generator...\n\n"
+            await asyncio.sleep(0.01)
+            
             query_generator = CypherQueryGenerator()
             cypher_query = query_generator.generate_query_manually(entities)
             yield "data: Query generation complete\n\n"
+            await asyncio.sleep(0.01)
             
             # Format the Cypher query to be SSE-friendly
             formatted_query = cypher_query.replace('\n', ' ').replace('\r', ' ')
             yield f"data: Generated Cypher query: {formatted_query}\n\n"
-
+            await asyncio.sleep(0.01)
 
             # Stream Cypher query execution
             yield "data: Initiating connection to Neo4j database...\n\n"
+            await asyncio.sleep(0.01)
+            
             yield "data: Executing Cypher query...\n\n"
+            await asyncio.sleep(0.01)
+            
             async with neo4j.session() as session:
                 yield "data: Database session established\n\n"
+                await asyncio.sleep(0.01)
+                
                 result = await session.run(cypher_query)
                 yield "data: Query executed, fetching results...\n\n"
+                await asyncio.sleep(0.01)
+                
                 records = await result.data()
             yield "data: Successfully retrieved results from database\n\n"
+            await asyncio.sleep(0.01)
+            yield f"data:xx--data--related_movies--{json.dumps([x['title'] for x in records])}\n\n"
+    
             
-            # Send final results
-            yield "data: Preparing final response...\n\n"
-            final_result = {
-                "entities": entities,
-                "result": records,
-                "similar_movies_by_plot": similar_movies
-            }
-            yield "data: Final results compiled\n\n"
-            yield f"data: {str(final_result)}\n\n"
             
         except Exception as e:
             yield f"data: Error occurred: {str(e)}\n\n"
@@ -112,7 +154,12 @@ async def stream_response(query: str):
 
     return StreamingResponse(
         event_generator(),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable Nginx buffering if you're using Nginx
+        }
     )
 
 @app.get("/{id}")
@@ -138,8 +185,8 @@ async def get_movie(id: int):
 
     return process_result(records[0])
 
-@app.post("/movies/batch")
-async def get_movies(ids: list[int]):
+@app.post("/movies/batch-by-ids")
+async def get_movies(ids: List[int]):
     cypher_query = """
         UNWIND $ids as id
         MATCH (target {id: id})
@@ -155,6 +202,33 @@ async def get_movies(ids: list[int]):
 
     async with neo4j.session() as session:
         result = await session.run(cypher_query, {"ids": ids})
+        records = await result.data()
+
+    if not records:
+        return {"message": "No movies found"}
+    
+
+    tasks = [asyncio.to_thread(process_result, record) for record in records]
+    processed_results = await asyncio.gather(*tasks)
+    return processed_results
+
+@app.post("/movies/batch-by-title")
+async def get_movies(title: List[str]):
+    cypher_query = """
+        UNWIND $titles as title
+        MATCH (target {title: title})
+        OPTIONAL MATCH (target)-[r]-(connected)
+        RETURN 
+            target { .* } AS target,
+            COLLECT({
+                relationship: TYPE(r),
+                direction: CASE WHEN startNode(r) = target THEN 'OUTGOING' ELSE 'INCOMING' END,
+                connected: connected { .* }
+            }) AS connections
+    """
+
+    async with neo4j.session() as session:
+        result = await session.run(cypher_query, {"titles": title})
         records = await result.data()
 
     if not records:
