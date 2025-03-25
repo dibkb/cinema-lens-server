@@ -3,10 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import asyncio
 from dotenv import load_dotenv
+from .brave import search_brave
 from .letterboxd import Letterboxd
 from .extractor import MovieExtractor
 from .reddit import RedditPost, RedditResult
-from .serp import search_google
 from .search_query import build_letterboxd_search_query, build_reddit_search_query
 from .qdrant import find_similar_by_plot
 from .query import CypherQueryGenerator, MovieEntities
@@ -68,7 +68,7 @@ async def shutdown_event():
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # In production, replace with specific origins
+    allow_origins=["http://localhost:5173","https://cinema.borborah.xyz"],  # In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -83,12 +83,27 @@ async def health():
     return {"status": "ok"}
 
 @app.get("/stream-response")
-async def stream_response(query: str):
+async def stream_response(
+    query: str,
+    min_year: Optional[str] = None,  # single year
+    max_year: Optional[str] = None,
+    genres: Optional[str] = None,
+    reddit: Optional[bool] = None,
+    letterboxd: Optional[bool] = None
+):
     async def event_generator():
         try:
             # Add a small delay between events to ensure they're sent immediately
             yield "data: Starting parallel processing...\n\n"
             await asyncio.sleep(0.01)  # Small delay to ensure immediate sending
+            yield f"data: received query: {query}\n\n"
+            yield f"data: received min_year: {min_year}\n\n"
+            yield f"data: received max_year: {max_year}\n\n"
+            yield f"data: received genres: {genres}\n\n"
+            yield f"data: received reddit: {reddit}\n\n"
+            yield f"data: received letterboxd: {letterboxd}\n\n"
+
+
             
             # Initialize entity extractor
             yield "data: Initializing entity extractor agent...\n\n"
@@ -99,8 +114,8 @@ async def stream_response(query: str):
             
             async def process_entity_extraction():
                 yield "data: Analyzing query for movie references and parameters...\n\n"
-                entities = await entity_extractor.extract_entities(query)
-                yield f"data: Entity extraction complete. Found entities: \n\n"
+                entities = await entity_extractor.extract_entities(query,min_year,max_year,genres)
+                yield f"data: Entity extraction complete. Found entities: {entities}\n\n"
                 yield f"data:xx--data--entities--{json.dumps(entities.model_dump())}\n\n"
                 yield ("result", entities)
             
@@ -119,10 +134,12 @@ async def stream_response(query: str):
             async def process_letterboxd_search(entities):
                 yield "data:Searching Letterboxd for movie recommendations...\n\n"
                 letterboxd_search_query = build_letterboxd_search_query(entities)
-                yield f"data:xx--data--letterboxd_search_query--{letterboxd_search_query}\n\n"
-                letterboxd_results = await asyncio.to_thread(search_google, letterboxd_search_query)
 
-                letterboxd_links = [x['link'] for x in letterboxd_results if str(x['link']).startswith('https://letterboxd.com')]
+                yield f"data:xx--data--letterboxd_search_query--{letterboxd_search_query}\n\n"
+                letterboxd_results = await asyncio.to_thread(search_brave, letterboxd_search_query)
+
+
+                letterboxd_links = [x['url'] for x in letterboxd_results if x is not None and str(x['url']).startswith('https://letterboxd.com')]
 
                 if len(letterboxd_links) == 0:
                     yield "data: No Letterboxd links found in Google search results\n\n"
@@ -148,7 +165,7 @@ async def stream_response(query: str):
                         result_data = await task
                         letterboxd_results.append(result_data)
 
-                yield f"data:xx--data--letterboxd_results--{json.dumps([x.model_dump() for x in letterboxd_results])}\n\n"
+                yield f"data:xx--data--letterboxd_results--{json.dumps([x.model_dump() for x in letterboxd_results if x is not None])}\n\n"
 
             
             async def process_reddit_search(entities):
@@ -157,8 +174,9 @@ async def stream_response(query: str):
                 yield f"data:xx--data--reddit_search_query--{reddit_search_query}\n\n"
                 
                 # Run Google search in a separate thread to not block
-                google_results = await asyncio.to_thread(search_google, reddit_search_query)
-                reddit_links = [x['link'] for x in google_results if str(x['link']).startswith('https://www.reddit.com')]
+                google_results = await asyncio.to_thread(search_brave, reddit_search_query)
+
+                reddit_links = [x['url'] for x in google_results if x is not None and str(x['url']).startswith('https://www.reddit.com')]
 
                 if len(reddit_links) == 0:
                     yield "data: No Reddit links found in Google search results\n\n"
@@ -189,10 +207,10 @@ async def stream_response(query: str):
                     for task in asyncio.as_completed(reddit_tasks):
                         result_data = await task
                         reddit_results.append(result_data)
-                
-                yield f"data:xx--data--reddit_results--{json.dumps([x.model_dump() for x in reddit_results])}\n\n"
+
+                yield f"data:xx--data--reddit_results--{json.dumps([x.model_dump() for x in reddit_results if x is not None])}\n\n"
             
-            async def process_cypher_query(entities):
+            async def process_cypher_query(entities:MovieEntities):
                 yield "data: Starting Cypher query generation...\n\n"
                 yield "data: Initializing query generator...\n\n"
                 
@@ -226,7 +244,8 @@ async def stream_response(query: str):
                         records = await result.data()
                     
                     yield "data: Successfully retrieved results from database\n\n"
-                    yield f"data:xx--data--related_movies--{json.dumps([x['title'] for x in records])}\n\n"
+                    llm_suggested = [x.lower() for x in entities.movie if x is not None] if entities.movies_present ==False and entities.movie is not None else []
+                    yield f"data:xx--data--related_movies--{json.dumps(llm_suggested + [x['title'].lower() for x in records if x is not None])}\n\n"
                     yield ("result", records)
                 except Exception as e:
                     error_message = str(e)
@@ -268,11 +287,12 @@ async def stream_response(query: str):
             # Run all generators concurrently
             tasks = [
                 asyncio.create_task(self_drain_generator(similarity_generator)),
-                asyncio.create_task(self_drain_generator(reddit_generator)),
                 asyncio.create_task(self_drain_generator(cypher_generator)),
-                asyncio.create_task(self_drain_generator(letterboxd_generator))
             ]
-            
+            if reddit:
+                tasks.append(asyncio.create_task(self_drain_generator(reddit_generator)))
+            if letterboxd:
+                tasks.append(asyncio.create_task(self_drain_generator(letterboxd_generator)))
             results = []
             # Wait for all tasks to complete and yield their messages in the order they complete
             for completed_task in asyncio.as_completed(tasks):
@@ -367,9 +387,11 @@ async def get_movies(title: List[str]):
         if not await init_neo4j():
             return {"error": "Database connection not available"}
             
+    # Modified query to use exact matches only
     cypher_query = """
-        UNWIND $titles as title
-        MATCH (target {title: title})
+        UNWIND $titles as search_title
+        MATCH (target)
+        WHERE target.title = search_title
         OPTIONAL MATCH (target)-[r]-(connected)
         RETURN 
             target { .* } AS target,
@@ -386,11 +408,29 @@ async def get_movies(title: List[str]):
             records = await result.data()
 
         if not records:
-            return {"message": "No movies found"}
+            return []
         
-        tasks = [asyncio.to_thread(process_result, record) for record in records]
-        processed_results = await asyncio.gather(*tasks)
+        processed_results = []
+        failed_titles = []
+        
+        async def process_record_safely(record):
+            try:
+                return await asyncio.to_thread(process_result, record)
+            except Exception as e:
+                logger.error(f"Failed to process record: {e}")
+                if 'target' in record and 'title' in record['target']:
+                    failed_titles.append(record['target']['title'])
+                return None
+        
+        tasks = [process_record_safely(record) for record in records]
+        results = await asyncio.gather(*tasks)
+        
+        # Filter out None values (failed processing)
+        processed_results = [r for r in results if r is not None]
+        
+            
         return processed_results
+        
     except Exception as e:
         logger.error(f"Error retrieving movies with titles {title}: {e}")
         return {"error": f"Database error: {str(e)}"}

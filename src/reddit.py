@@ -36,14 +36,14 @@ class RedditPost:
             chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
 
             self.driver = webdriver.Chrome(options=chrome_options)
-            self.driver.set_page_load_timeout(60)
+            self.driver.set_page_load_timeout(6)
 
             logger.info(f"Navigating to {self.url}")
             self.driver.get(self.url)
 
             # Wait for title element
             logger.info("Waiting for title element")
-            wait = WebDriverWait(self.driver, 60)
+            wait = WebDriverWait(self.driver, 6)
             title_element = wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'h1[slot="title"]'))
             )

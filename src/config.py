@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY")
     QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY")
     SERP_API_KEY: str = os.getenv("SERP_API_KEY")
+    BRAVE_SEARCH_API_KEY: str = os.getenv("BRAVE_SEARCH_API_KEY")
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
 
 
     
