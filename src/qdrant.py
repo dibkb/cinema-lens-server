@@ -1,25 +1,17 @@
-from contextlib import asynccontextmanager
-from qdrant_client import QdrantClient, models
+from qdrant_client import  models
 import os
 import asyncio
 from typing import List
 import numpy as np
 from .entity import MovieEntities
-@asynccontextmanager
-async def get_qdrant_client():
-    qdrant_client = QdrantClient(
-        url=os.getenv("QDRANT_URI"),
-        api_key=os.getenv("QDRANT_API_KEY")
-    )
-    yield qdrant_client
-    qdrant_client.close()
+from .qdrant_client_singleton import QdrantClientSingleton
 
 
 async def get_movie_by_title(title: str):
-    async with get_qdrant_client() as qdrant_client:
         # Use asyncio.to_thread to make the synchronous Qdrant operation non-blocking
-        reference_movie = await asyncio.to_thread(
-            qdrant_client.scroll,
+    client = await QdrantClientSingleton.get_instance()
+    reference_movie = await asyncio.to_thread(
+            client.scroll,
             collection_name="movies_plot",
             scroll_filter=models.Filter(
                 must=[
@@ -58,6 +50,22 @@ def average_vectors(vectors: List[np.ndarray]) -> np.ndarray:
 
 
 
+async def find_similar_by_embedding(embedding: List[float], top_k: int = 10) -> List[dict]:
+    """
+    Find similar movies by embedding
+    """
+
+        # Use asyncio.to_thread to make the synchronous operation non-blocking
+    client = await QdrantClientSingleton.get_instance()
+    results = await asyncio.to_thread(
+            client.search,
+            collection_name="movies_plot",
+            query_vector=embedding,
+            limit=top_k,
+            with_payload=["title"]
+    )
+    return [hit.payload["title"] for hit in results]
+
 async def find_similar_by_plot(entities: MovieEntities, top_k: int = 10) -> List[dict]:
     """
     Find similar movies by averaging plot embeddings of input titles
@@ -82,17 +90,43 @@ async def find_similar_by_plot(entities: MovieEntities, top_k: int = 10) -> List
     )
 
     # Search Qdrant
-    async with get_qdrant_client() as qdrant_client:
+
         # Use asyncio.to_thread to make the synchronous operation non-blocking
-        results = await asyncio.to_thread(
-            qdrant_client.search,
+    client = await QdrantClientSingleton.get_instance()
+    results = await asyncio.to_thread(
+            client.search,
             collection_name="movies_plot",
             query_vector=query_vector,
             query_filter=exclude_filter,
             limit=top_k,
             with_payload=["title"]
-        )
+    )
     return [hit.payload["title"] for hit in results]
 
+
+
+
+import requests 
+jina_api_key = os.getenv("JINA_API_KEY")
+async def embed_text(text:str):
+    url = 'https://api.jina.ai/v1/embeddings'
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {jina_api_key}'
+    }
+    data = {
+        "model": "jina-embeddings-v3",
+        "task": "retrieval.query",
+        "input": [
+            text
+        ]
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+    json = response.json()
+    if "data" in json and len(json["data"]) > 0:
+        return json["data"][0]["embedding"]
+    else:
+        return None
 
 

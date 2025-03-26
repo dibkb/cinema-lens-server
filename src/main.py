@@ -1,6 +1,9 @@
+from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from qdrant_client import QdrantClient
 import asyncio
 from dotenv import load_dotenv
 from .brave import search_brave
@@ -8,7 +11,7 @@ from .letterboxd import Letterboxd
 from .extractor import MovieExtractor
 from .reddit import RedditPost, RedditResult
 from .search_query import build_letterboxd_search_query, build_reddit_search_query
-from .qdrant import find_similar_by_plot
+from .qdrant import embed_text, find_similar_by_embedding, find_similar_by_plot
 from .query import CypherQueryGenerator, MovieEntities
 from .entity import EntityExtractorAgent
 from .neo4j import process_result
@@ -18,7 +21,7 @@ from typing import List, Optional
 import logging
 load_dotenv()
 import json
-
+from .qdrant_client_singleton import QdrantClientSingleton
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,6 +32,8 @@ app = FastAPI(
     version="1.0.0"
 )
 
+async def get_qdrant_client():
+    return await QdrantClientSingleton.get_instance()
 # Initialize Neo4j driver with connection validation
 
 async def init_neo4j():
@@ -54,16 +59,19 @@ async def init_neo4j():
         logger.error(f"Failed to connect to Neo4j: {e}")
         neo4j = None
         return False
+    
 
 # Initialize at startup
 @app.on_event("startup")
 async def startup_event():
     await init_neo4j()
-
+    await get_qdrant_client()
 @app.on_event("shutdown")
 async def shutdown_event():
     if neo4j:
         await neo4j.close()
+    if qdrant_client:
+        await qdrant_client.close()
 
 # Configure CORS
 app.add_middleware(
@@ -82,6 +90,35 @@ async def root():
 async def health():
     return {"status": "ok"}
 
+
+
+@app.get("/stream-response-summary")
+async def stream_response_summary(
+    query: str,
+):
+    async def event_generator():
+        yield "data: Getting embedding of the query\n\n"
+        
+        # Create and execute the embedding task
+        embedding_task = asyncio.create_task(embed_text(query))
+        
+        try:
+            embedding = await embedding_task
+            similar_movies = await find_similar_by_embedding(embedding,3)
+            yield f"data:xx--data--similar_movies--{json.dumps(similar_movies)}\n\n"
+        except Exception as e:
+            yield f"data: Error getting embedding: {str(e)}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  
+        }
+    )
+    
 @app.get("/stream-response")
 async def stream_response(
     query: str,
