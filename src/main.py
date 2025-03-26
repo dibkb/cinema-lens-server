@@ -70,8 +70,7 @@ async def startup_event():
 async def shutdown_event():
     if neo4j:
         await neo4j.close()
-    if qdrant_client:
-        await qdrant_client.close()
+    await QdrantClientSingleton.close()
 
 # Configure CORS
 app.add_middleware(
