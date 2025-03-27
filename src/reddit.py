@@ -1,7 +1,8 @@
-import requests
 import logging
 from pydantic import BaseModel, Field
 from typing import List
+import praw
+from .config import settings
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -12,45 +13,33 @@ class RedditResult(BaseModel):
 
 class RedditPost:
     def __init__(self, url):
-        self.url = url if url.endswith('.json') else url + ".json"
-        self.headers = {
-            'User-Agent': 'CinemaLens/1.0 (Contact: your@email.com)',
-            'Accept': 'application/json',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'DNT': '1'
-        }
+        self.id = self.extract_id(url)
         self.comments = []
+        self.client  = praw.Reddit(
+            client_id=settings.REDDIT_CLIENT_ID,
+            client_secret=settings.REDDIT_SECRET,
+            user_agent='script:myapp:v1.0 (by /u/dibkb)'
+        )
 
+    def extract_id(self,url):
+        # https://www.reddit.com/r/movies/comments/111uty4/what_movies_are_on_par_with_interstellar/
+        parts = url.split("/comments/")
+        if len(parts) > 1:
+            id = parts[1].split("/")[0]
+            return id if id else None
+        return None
     def get_comments(self):
         if len(self.comments) > 0:
             return self.comments
         
-        logger.info(f"Attempting to fetch comments from: {self.url}")
-        response = requests.get(self.url, headers=self.headers)
-        
-        logger.info(f"Response status code: {response.status_code}")
-        if response.status_code == 200:
-            data = response.json()
-            logger.info(f"Response data structure: {data[1]['data'].keys() if len(data) > 1 else 'No data'}")
-            
-            comment_data = data[1]['data']['children']
-            logger.info(f"Number of comments found: {len(comment_data)}")
-            
-            for comment in comment_data:
-                comment_body = comment['data'].get('body')
-                if comment_body:
-                    self.comments.append(comment_body.strip())
-                    logger.info(f"Added comment, current count: {len(self.comments)}")
-                    if len(self.comments) == 6:
-                        break
-        else:
-            logger.error(f"Failed to fetch data: {response.status_code}")
-            logger.error(f"Response content: {response.text}")
-        
-        return self.comments
+        submission = self.client.submission(id=self.id)
+        submission.comments.replace_more(limit=10)
+        for comment in submission.comments.list():
+            self.comments.append(comment.body)
+            if len(self.comments) == 6:
+                break
 
+        return self.comments
 
     
 

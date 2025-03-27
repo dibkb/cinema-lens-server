@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     SERP_API_KEY: str = os.getenv("SERP_API_KEY")
     BRAVE_SEARCH_API_KEY: str = os.getenv("BRAVE_SEARCH_API_KEY")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
+    REDDIT_CLIENT_ID: str = os.getenv("REDDIT_CLIENT_ID")
+    REDDIT_SECRET: str = os.getenv("REDDIT_SECRET")
 
 
     
