@@ -37,10 +37,10 @@ deploy:
     - chmod 600 ~/.ssh/test.pem
     - head -n 1 ~/.ssh/test.pem
     - ls -la ~/.ssh/test.pem
-    - ssh -v -T -o StrictHostKeyChecking=no -i ~/.ssh/test.pem ubuntu@${AWS_EC2_HOST} 'exit'
+    - ssh -v -T -o StrictHostKeyChecking=no -i ~/.ssh/test.pem ${AWS_EC2_HOST} 'exit'
   script:
     - |
-      ssh -T -i ~/.ssh/test.pem ubuntu@${AWS_EC2_HOST} "
+      ssh -T -i ~/.ssh/test.pem ${AWS_EC2_HOST} "
 
         docker pull $CI_REGISTRY_USER/$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
 
