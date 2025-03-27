@@ -42,6 +42,7 @@ deploy:
     - |
       ssh -T -i ~/.ssh/test.pem ${AWS_EC2_HOST} "
 
+        docker rmi $CI_REGISTRY_USER/$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG || true
         docker pull $CI_REGISTRY_USER/$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
 
         docker stop $CI_REGISTRY_IMAGE || true
@@ -58,3 +59,13 @@ deploy:
       "
   only:
     - main
+
+  # docker run -d \
+#       docker run -d \
+#       --name cinema-lens-server \
+#       -p 8000:8000 \
+#       --env-file .env \
+#       --restart unless-stopped \
+#       dibkb/cinema-lens-server:main
+
+# docker pull dibkb/cinema-lens-server:main

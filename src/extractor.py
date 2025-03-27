@@ -44,5 +44,6 @@ class MovieExtractor():
         )
 
     def extract_movies(self, comments: list[str]) -> list[str]:
+        print(comments)
         response = self.llm.invoke(self.prompt.format(comments=comments))
         return self.parser.parse(response.content)
