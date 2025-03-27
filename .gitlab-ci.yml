@@ -1,0 +1,59 @@
+image: python:3.9-slim
+
+variables:
+  AWS_EC2_HOST: $AWS_EC2_HOST
+  EC2_IP: $EC2_IP
+  SSH_PRIVATE_KEY: $SSH_PRIVATE_KEY
+  IMAGE_TAG: $CI_COMMIT_REF_SLUG
+  IMAGE_NAME: $CI_REGISTRY_IMAGE
+stages:
+  - build
+  - deploy
+
+build_image:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+
+  script:
+    - docker build -t --platform linux/amd64 $CI_REGISTRY_USER/$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG .
+    - docker push $CI_REGISTRY_USER/$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  only:
+    - main
+
+deploy:
+  stage: deploy
+  image: ubuntu:latest
+  before_script:
+    - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
+    - apt-get install -y curl
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/test.pem
+    - chmod 600 ~/.ssh/test.pem
+    - head -n 1 ~/.ssh/test.pem
+    - ls -la ~/.ssh/test.pem
+    - ssh -v -T -o StrictHostKeyChecking=no -i ~/.ssh/test.pem ubuntu@${EC2_IP} 'exit'
+  script:
+    - |
+      ssh -T -i ~/.ssh/test.pem ubuntu@${EC2_IP} "
+
+        docker pull $CI_REGISTRY_USER/$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+
+        docker stop $CI_REGISTRY_IMAGE || true
+        docker rm -f $CI_REGISTRY_IMAGE || true
+
+        docker run -d \
+          --name $CI_REGISTRY_IMAGE \
+          -p 8000:8090 \
+          --restart unless-stopped \
+          $CI_REGISTRY_USER/$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+
+        docker image prune -af --filter 'until=48h' 
+      "
+  only:
+    - main
