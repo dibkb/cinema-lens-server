@@ -19,7 +19,7 @@ class RedditPost:
         self.comments = []
 
     def get_comments(self):
-        if self.comments:
+        if len(self.comments) > 0:
             return self.comments
         response = requests.get(self.url, headers=self.headers)
         if response.status_code == 200:

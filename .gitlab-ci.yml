@@ -50,6 +50,7 @@ deploy:
         docker run -d \
           --name $CI_REGISTRY_IMAGE \
           -p 8000:8000 \
+          --env-file .env \
           --restart unless-stopped \
           $CI_REGISTRY_USER/$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
 
