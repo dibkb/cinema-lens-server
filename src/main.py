@@ -82,7 +82,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to Cinema Lens API"}
+    return "Welcome to Cinema Lens API"
 
 @app.get("/health")
 async def health():
