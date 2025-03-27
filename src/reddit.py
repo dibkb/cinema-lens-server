@@ -30,18 +30,18 @@ class RedditPost:
         response = requests.get(self.url, headers=self.headers)
         if response.status_code == 200:
             data = response.json()
-            comments = data[1]['data']['children']
+            comment_data = data[1]['data']['children']
             
-            for comment in comments:
+            for comment in comment_data:
                 comment_body = comment['data'].get('body')
                 if comment_body:
                     self.comments.append(comment_body.strip())
                     if len(self.comments) == 6:
                         break
-            return self.comments
         else:
             logger.error(f"Failed to fetch data: {response.status_code}")
-            return self.comments
+        
+        return self.comments
 
 
     
