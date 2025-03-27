@@ -30,6 +30,8 @@ class RedditPost:
             comment_body = comment['data'].get('body')
             if comment_body:
                 self.comments.append(comment_body.strip())
+                if len(self.comments) == 10:
+                    break
         else:
             logger.error(f"Failed to fetch data: {response.status_code}")
         return self.comments
