@@ -3,7 +3,6 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from qdrant_client import QdrantClient
 import asyncio
 from dotenv import load_dotenv
 from .brave import search_brave
@@ -96,6 +95,8 @@ async def stream_response_summary(
     query: str,
 ):
     async def event_generator():
+        yield "data: Recieved query...\n\n"
+        yield f"data:{query}\n\n"
         yield "data: Getting embedding of the query\n\n"
         
         # Create and execute the embedding task
@@ -103,7 +104,9 @@ async def stream_response_summary(
         
         try:
             embedding = await embedding_task
-            similar_movies = await find_similar_by_embedding(embedding,3)
+            yield "data: Found embedding of the query\n\n"
+            yield f"data: Searching for top 10 similar movies based on embedding\n\n"
+            similar_movies = await find_similar_by_embedding(embedding,5)
             yield f"data:xx--data--similar_movies--{json.dumps(similar_movies)}\n\n"
         except Exception as e:
             yield f"data: Error getting embedding: {str(e)}\n\n"
@@ -131,7 +134,6 @@ async def stream_response(
         try:
             # Add a small delay between events to ensure they're sent immediately
             yield "data: Starting parallel processing...\n\n"
-            await asyncio.sleep(0.01)  # Small delay to ensure immediate sending
             yield f"data: received query: {query}\n\n"
             yield f"data: received min_year: {min_year}\n\n"
             yield f"data: received max_year: {max_year}\n\n"
@@ -143,7 +145,7 @@ async def stream_response(
             
             # Initialize entity extractor
             yield "data: Initializing entity extractor agent...\n\n"
-            await asyncio.sleep(0.01)
+            
             entity_extractor = EntityExtractorAgent()
             
             # Define async functions for each process
@@ -230,9 +232,8 @@ async def stream_response(
                     # Define as a regular async function, not an async generator
                     async def process_single_reddit_link(link_url):
                         post = RedditPost(link_url)
-                        await asyncio.to_thread(post.initialize)
-                        movie_extractor = MovieExtractor()
                         comments = post.get_comments()
+                        movie_extractor = MovieExtractor()
                         movies = await asyncio.to_thread(movie_extractor.extract_movies, comments)
                         return RedditResult(movies=movies.movies, site_url=link_url)
                     

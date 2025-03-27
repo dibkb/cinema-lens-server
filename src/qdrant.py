@@ -62,7 +62,8 @@ async def find_similar_by_embedding(embedding: List[float], top_k: int = 10) -> 
             collection_name="movies_plot",
             query_vector=embedding,
             limit=top_k,
-            with_payload=["title"]
+            with_payload=["title"],
+            score_threshold=0.5
     )
     return [hit.payload["title"] for hit in results]
 

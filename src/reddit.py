@@ -1,9 +1,4 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from bs4 import BeautifulSoup
+import requests
 import logging
 from pydantic import BaseModel, Field
 from typing import List
@@ -17,62 +12,29 @@ class RedditResult(BaseModel):
 
 class RedditPost:
     def __init__(self, url):
-        self.url = url
-        self.html = None
-        self.title = None
-        self.driver = None
+        self.url = url + ".json"
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'
+        }
         self.comments = []
 
-    def initialize(self):
-        try:
-            # Set up Chrome options
-            chrome_options = Options()
-            chrome_options.add_argument('--headless')
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument('--disable-web-security')
-            chrome_options.add_argument('--window-size=1280,800')
-            chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
-
-            self.driver = webdriver.Chrome(options=chrome_options)
-            self.driver.set_page_load_timeout(6)
-
-            logger.info(f"Navigating to {self.url}")
-            self.driver.get(self.url)
-
-            # Wait for title element
-            logger.info("Waiting for title element")
-            wait = WebDriverWait(self.driver, 6)
-            title_element = wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, 'h1[slot="title"]'))
-            )
-
-            self.title = title_element.text
-            self.html = self.driver.page_source
-
-        except Exception as e:
-            logger.error(f"Error during initialization: {str(e)}")
-            if hasattr(self, 'driver') and self.driver:
-                self.driver.quit()
-            raise
-        finally:
-            if hasattr(self, 'driver') and self.driver:
-                self.driver.quit()
-
-    def get_html(self):
-        return self.html
-    
     def get_comments(self):
-        soup = BeautifulSoup(self.html, 'html.parser')
-        comments = soup.find_all('div', attrs={'slot': 'comment'})
+        if self.comments:
+            return self.comments
+        response = requests.get(self.url, headers=self.headers)
+        if response.status_code == 200:
+            data = response.json()
+            comments = data[1]['data']['children']
+            
         for comment in comments:
-            if(comment.find('p')):
-                self.comments.append(comment.find('p').text.strip())
+            comment_body = comment['data'].get('body')
+            if comment_body:
+                self.comments.append(comment_body.strip())
+        else:
+            logger.error(f"Failed to fetch data: {response.status_code}")
         return self.comments
-    
-    def get_title(self):
-        return self.title.strip() if self.title else None
+
+
     
 
 
