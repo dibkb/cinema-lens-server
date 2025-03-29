@@ -25,8 +25,8 @@ class MovieEntities(BaseModel):
 
 class EntityExtractorAgent:
     def __init__(self):
-        # self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7,api_key=settings.OPENAI_API_KEY)
-        self.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=.7,api_key=settings.GEMINI_API_KEY)
+        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7,api_key=settings.OPENAI_API_KEY)
+        # self.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=.7,api_key=settings.GEMINI_API_KEY)
         # self.llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0,api_key=settings.GEMINI_API_KEY)
         # self.llm = ChatGroq(model="mixtral-8x7b-32768", temperature=0, api_key=settings.GROQ_API_KEY)
         # self.llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, api_key=settings.GROQ_API_KEY)
